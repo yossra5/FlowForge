@@ -1,6 +1,6 @@
 # FlowForge — Full Stack Workflow Builder
 
-React + Express + NodeJS + MongoDB.
+React [React Flow/Lucid React]+ Express + NodeJS + MongoDB.
 
 ---
 
