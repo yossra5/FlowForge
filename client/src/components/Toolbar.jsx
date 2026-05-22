@@ -1,18 +1,39 @@
 // client/src/components/Toolbar.jsx
 
-import React, { useState } from "react";
-import { Download, Save, ArrowLeft, Workflow, Check, Play, AlertCircle, Sun, Moon, Palette } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { Download, Save, ArrowLeft, Workflow, Check, Play, AlertCircle, Sun, Moon, Palette, Upload } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 
 export default function Toolbar({
   workflowName, nodeCount,
-  onSave, onDownload, onRun, onBack,
+  onSave, onDownload, onRun, onBack, onImport,
+  needsConfirmation = false,
   saving, saveStatus, running,
 }) {
-  const { isDark, toggleMode, canvasTheme, setCanvasTheme, CANVAS_THEMES, ui } = useTheme();
+  const { isDark, toggleMode, canvasTheme, setCanvasTheme, CANVAS_THEMES} = useTheme();
   const [editingName,    setEditingName]    = useState(false);
   const [draft,          setDraft]          = useState(workflowName);
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const { ui } = useTheme();
+  
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  
+  const fileInputRef = useRef(null);
+
+  const handleImportClick = () => {
+    fileInputRef.current.click();
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (onImport) {
+      onImport(file);
+    }
+    event.target.value = "";
+  };
 
   const commitName = () => {
     setEditingName(false);
@@ -32,119 +53,185 @@ export default function Toolbar({
     return "Save";
   };
 
+  const handleRunClick = () => {
+    if (needsConfirmation) {
+      setShowConfirmDialog(true);
+    } else {
+      onRun();
+    }
+  };
+
+  const confirmRun = () => {
+    setShowConfirmDialog(false);
+    onRun();
+  };
+
+  const cancelRun = () => {
+    setShowConfirmDialog(false);
+  };
+
   return (
-    <header style={{ ...s.bar, background: ui.topbar, borderColor: ui.border }}>
-      <div style={s.left}>
-        <button style={{ ...s.iconBtn, color: ui.textMuted }} onClick={onBack} title="Dashboard">
-          <ArrowLeft size={15} />
-        </button>
-        <div style={{ ...s.logo, background: ui.surface2, borderColor: ui.border }}>
-          <Workflow size={16} color="#e06c3a" />
+    <>
+      <header style={{ ...s.bar, background: ui.topbar, borderColor: ui.border }}>
+        <div style={s.left}>
+          <button style={{ ...s.iconBtn, color: ui.textMuted }} onClick={onBack} title="Dashboard">
+            <ArrowLeft size={15} />
+          </button>
+          <div style={{ ...s.logo, background: ui.surface2, borderColor: ui.border }}>
+            <Workflow size={16} color="#e06c3a" />
+          </div>
+
+          {editingName ? (
+            <div style={s.nameEditRow}>
+              <input
+                style={{ ...s.nameInput, background: ui.surface2, borderColor: "#e06c3a", color: ui.text }}
+                value={draft}
+                autoFocus
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter")  commitName();
+                  if (e.key === "Escape") { setDraft(workflowName); setEditingName(false); }
+                }}
+              />
+              <button style={{ ...s.iconBtn, color: "#e06c3a" }} onMouseDown={commitName}>
+                <Check size={13} />
+              </button>
+            </div>
+          ) : (
+            <span
+              style={{ ...s.wfName, color: ui.text, borderBottomColor: ui.border }}
+              onClick={() => { setDraft(workflowName); setEditingName(true); }}
+              title="Click to rename"
+            >
+              {workflowName}
+            </span>
+          )}
+
+          <span style={{ ...s.nodeCount, color: ui.textHint }}>
+            {nodeCount} node{nodeCount !== 1 ? "s" : ""}
+          </span>
         </div>
 
-        {editingName ? (
-          <div style={s.nameEditRow}>
-            <input
-              style={{ ...s.nameInput, background: ui.surface2, borderColor: "#e06c3a", color: ui.text }}
-              value={draft}
-              autoFocus
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitName}
-              onKeyDown={(e) => {
-                if (e.key === "Enter")  commitName();
-                if (e.key === "Escape") { setDraft(workflowName); setEditingName(false); }
-              }}
-            />
-            <button style={{ ...s.iconBtn, color: "#e06c3a" }} onMouseDown={commitName}>
-              <Check size={13} />
+        <div style={s.right}>
+          {/* Canvas theme picker */}
+          <div style={{ position: "relative" }}>
+            <button
+              style={{ ...s.iconBtn2, color: ui.textMuted, borderColor: ui.border }}
+              onClick={() => setShowThemePicker((v) => !v)}
+              title="Canvas background"
+            >
+              <Palette size={14} />
             </button>
+
+            {showThemePicker && (
+              <div style={{ ...s.themePicker, background: ui.surface, borderColor: ui.border }}>
+                <p style={{ ...s.themePickerTitle, color: ui.textMuted }}>Canvas Background</p>
+                <div style={s.themeGrid}>
+                  {CANVAS_THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      title={t.label}
+                      onClick={() => { setCanvasTheme(t); setShowThemePicker(false); }}
+                      style={{
+                        ...s.themeBtn,
+                        background: t.bg,
+                        boxShadow: canvasTheme.id === t.id ? `0 0 0 2px #e06c3a` : `0 0 0 1px ${ui.border}`,
+                      }}
+                    >
+                      <div style={{ ...s.themeDot, background: t.dot }} />
+                      <span style={{ ...s.themeLabel, color: t.bg === "#f8fafc" || t.bg === "#f1f5f9" ? "#334155" : "#aaa" }}>
+                        {t.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        ) : (
-          <span
-            style={{ ...s.wfName, color: ui.text, borderBottomColor: ui.border }}
-            onClick={() => { setDraft(workflowName); setEditingName(true); }}
-            title="Click to rename"
-          >
-            {workflowName}
-          </span>
-        )}
 
-        <span style={{ ...s.nodeCount, color: ui.textHint }}>
-          {nodeCount} node{nodeCount !== 1 ? "s" : ""}
-        </span>
-      </div>
-
-      <div style={s.right}>
-        {/* Canvas theme picker */}
-        <div style={{ position: "relative" }}>
+          {/* Dark / Light mode toggle */}
           <button
             style={{ ...s.iconBtn2, color: ui.textMuted, borderColor: ui.border }}
-            onClick={() => setShowThemePicker((v) => !v)}
-            title="Canvas background"
+            onClick={toggleMode}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
           >
-            <Palette size={14} />
+            {isDark ? <Sun size={14} /> : <Moon size={14} />}
           </button>
 
-          {showThemePicker && (
-            <div style={{ ...s.themePicker, background: ui.surface, borderColor: ui.border }}>
-              <p style={{ ...s.themePickerTitle, color: ui.textMuted }}>Canvas Background</p>
-              <div style={s.themeGrid}>
-                {CANVAS_THEMES.map((t) => (
-                  <button
-                    key={t.id}
-                    title={t.label}
-                    onClick={() => { setCanvasTheme(t); setShowThemePicker(false); }}
-                    style={{
-                      ...s.themeBtn,
-                      background: t.bg,
-                      boxShadow: canvasTheme.id === t.id ? `0 0 0 2px #e06c3a` : `0 0 0 1px ${ui.border}`,
-                    }}
-                  >
-                    <div style={{ ...s.themeDot, background: t.dot }} />
-                    <span style={{ ...s.themeLabel, color: t.bg === "#f8fafc" || t.bg === "#f1f5f9" ? "#334155" : "#aaa" }}>
-                      {t.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Run button with confirmation */}
+          <button
+            style={{ ...s.runBtn, opacity: (running || nodeCount === 0) ? 0.5 : 1 }}
+            onClick={handleRunClick}
+            disabled={running || nodeCount === 0}
+            title={nodeCount === 0 ? "Add nodes first" : "Run all nodes in order"}
+          >
+            <Play size={13} style={{ marginRight: 5 }} />
+            {running ? "Running…" : "Run Workflow"}
+          </button>
+
+          {/* Save */}
+          <button style={{ ...saveBtnStyle(), display: "flex", alignItems: "center" }}
+            onClick={() => onSave()} disabled={saving}>
+            <Save size={13} style={{ marginRight: 5 }} />
+            {saveBtnContent()}
+          </button>
+
+          {/* Import JSON button */}
+          <button
+            style={{
+              ...s.runBtn,
+              background: "#1a2a3a",
+              border: "1px solid #1e4a7a",
+              color: "#89b4fa"
+            }}
+            onClick={handleImportClick}
+            title="Import workflow JSON"
+          >
+            <Upload size={13} style={{ marginRight: 5 }} />
+            Import JSON
+          </button>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".json"
+            style={{ display: "none" }}
+          />
+
+          {/* Export JSON button */}
+          <button
+            style={{
+              ...s.runBtn,
+              background: "#1a2a3a",
+              border: "1px solid #2d2d4e",
+              color: "#e8e8f0"
+            }}
+            onClick={onDownload}
+            title="Download workflow JSON"
+          >
+            <Download size={13} style={{ marginRight: 5 }} />
+            Export JSON
+          </button>
         </div>
+      </header>
 
-        {/* Dark / Light mode toggle */}
-        <button
-          style={{ ...s.iconBtn2, color: ui.textMuted, borderColor: ui.border }}
-          onClick={toggleMode}
-          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-        >
-          {isDark ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
-
-        {/* Run */}
-        <button
-          style={{ ...s.runBtn, opacity: (running || nodeCount === 0) ? 0.5 : 1 }}
-          onClick={onRun}
-          disabled={running || nodeCount === 0}
-          title={nodeCount === 0 ? "Add nodes first" : "Run all nodes in order"}
-        >
-          <Play size={13} style={{ marginRight: 5 }} />
-          {running ? "Running…" : "Run Workflow"}
-        </button>
-
-        {/* Save */}
-        <button style={{ ...saveBtnStyle(), display: "flex", alignItems: "center" }}
-          onClick={() => onSave()} disabled={saving}>
-          <Save size={13} style={{ marginRight: 5 }} />
-          {saveBtnContent()}
-        </button>
-
-        {/* Download */}
-        <button style={s.dlBtn} onClick={onDownload} title="Download workflow JSON">
-          <Download size={13} style={{ marginRight: 5 }} />
-          Export JSON
-        </button>
-      </div>
-    </header>
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div style={confirmStyles.overlay} onClick={cancelRun}>
+          <div style={confirmStyles.dialog} onClick={(e) => e.stopPropagation()}>
+            <div style={confirmStyles.icon}>⚠️</div>
+            <h3 style={confirmStyles.title}>Confirm Run</h3>
+            <p style={confirmStyles.message}>Are you sure you want to run this workflow?</p>
+            <div style={confirmStyles.buttons}>
+              <button style={confirmStyles.cancelBtn} onClick={cancelRun}>Cancel</button>
+              <button style={confirmStyles.confirmBtn} onClick={confirmRun}>Run Workflow</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -196,14 +283,6 @@ const s = {
     fontSize: 12, color: "#4ade80", fontWeight: 500,
     cursor: "pointer", transition: "all 0.3s",
   },
-  dlBtn: {
-    display: "flex", alignItems: "center",
-    background: "none", border: "1px solid #2d2d4e",
-    borderRadius: 7, padding: "6px 14px",
-    fontSize: 12, color: "#e8e8f0", fontWeight: 500,
-    cursor: "pointer",
-  },
-  // Theme picker dropdown
   themePicker: {
     position: "absolute", top: 38, right: 0,
     border: "1px solid", borderRadius: 10,
@@ -219,4 +298,33 @@ const s = {
   },
   themeDot: { width: 16, height: 16, borderRadius: 4 },
   themeLabel: { fontSize: 10, fontWeight: 500 },
+};
+
+const confirmStyles = {
+  overlay: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "rgba(0,0,0,0.7)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2000,
+  },
+  dialog: {
+    background: "#13132a",
+    border: "1px solid #2d2d4e",
+    borderRadius: 12,
+    padding: "24px 32px",
+    minWidth: 320,
+    textAlign: "center",
+  },
+  icon: { fontSize: 48, marginBottom: 16 },
+  title: { margin: "0 0 8px 0", fontSize: 18, fontWeight: 600, color: "#e8e8f0" },
+  message: { margin: "0 0 24px 0", fontSize: 13, color: "#888" },
+  buttons: { display: "flex", gap: 12, justifyContent: "center" },
+  cancelBtn: { background: "none", border: "1px solid #2d2d4e", borderRadius: 6, padding: "8px 20px", fontSize: 12, color: "#888", cursor: "pointer" },
+  confirmBtn: { background: "#e06c3a", border: "none", borderRadius: 6, padding: "8px 20px", fontSize: 12, color: "#fff", fontWeight: 600, cursor: "pointer" },
 };

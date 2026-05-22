@@ -39,7 +39,7 @@ export const NODE_CATALOG = [
     {
         type: "AIAgent",
         label: "AI Agent",
-        description: "Intelligent task automation",
+        description: null, // Description is optional - if null, sidebar will show a default one based on the parameters
         color: " #ac00e6",
         icon: "Bot",
         category: "AI",
@@ -76,10 +76,12 @@ export const TRIGGER_NODE_TYPES = new Set(["ScheduleTrigger", "ManualTrigger"]);
 // Default parameters per type
 export const APICALL_DEFAULTS = {
     base_url: "",
+    base_url_mode: "fixed",
     endpoint: "",
+    endpoint_mode: "fixed",
     url_mode: "fixed",
     method: "GET",
-    payload: { type: "keypair", fields: [], json: "" },
+    payload: { type: "keypair", fields: [], json: "", jsonMode: "fixed" },
     authentication: { type: "none" },
 };
 
@@ -92,6 +94,7 @@ export const SCHEDULE_TRIGGER_DEFAULTS = {
 export const MANUAL_TRIGGER_DEFAULTS = {
     requiresConfirmation: true,
     buttonLabel: "Run Workflow",
+    variables: [],
 };
 
 export const AIAGENT_DEFAULTS = {
@@ -102,11 +105,20 @@ export const AIAGENT_DEFAULTS = {
 };
 
 export const LLMCALL_DEFAULTS = {
-    provider: "openai",
-    model: "gpt-4",
-    prompt: "",
-    temperature: 0.7,
+    LLM_model: "gpt-4.1",
+    system_prompt_template: "You are a helpful assistant",
+    input_prompt_template: [{ type: "text", text: "" }, { type: "image", image: "" } // Uncomment to add image block by default
+    ],
+    response_format: null,
 };
+
+// ── LLM model options (single source of truth for the dropdown) ──────────────
+export const LLM_MODELS = ["gpt-4.1", "gpt-4o-mini"];
+// Add this alongside API_NODE_TYPES and TRIGGER_NODE_TYPES
+export const LLM_NODE_TYPES = new Set(["LLMCall"]);
+// ── Prompt-part factories ─────────────────────────────────────────────────────
+export function makeTextPart(text = "") { return { type: "text", text }; }
+export function makeImagePart(image = "") { return { type: "image", image }; }
 
 export function getDefaultParams(type) {
     switch (type) {
@@ -119,21 +131,70 @@ export function getDefaultParams(type) {
         case "AIAgent":
             return {...AIAGENT_DEFAULTS };
         case "LLMCall":
-            return {...LLMCALL_DEFAULTS };
+            // Deep-clone the default so each node instance gets its own array
+            return {
+                ...LLMCALL_DEFAULTS,
+                input_prompt_template: [makeTextPart(""), makeImagePart("")] // Add image block by default ,
+            };
         default:
             return {};
     }
+}
+
+function parseValueByType(value, valueType) {
+    if (valueType === "number") {
+        const num = Number(value);
+        return Number.isNaN(num) ? value : num;
+    }
+    if (valueType === "boolean") {
+        return String(value).toLowerCase() === "true";
+    }
+    if (valueType === "object" || valueType === "list") {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return value;
+        }
+    }
+    return String(value);
 }
 
 export function buildPayloadDict(payload) {
     if (!payload) return {};
     if (payload.type === "keypair") {
         const dict = {};
-        for (const f of(payload.fields || [])) { if (f.key) dict[f.key] = f.value; }
+        for (const f of(payload.fields || [])) {
+            if (!f.key) continue;
+            dict[f.key] = parseValueByType(f.value, f.valueType || "string");
+        }
         return dict;
     }
     if (payload.type === "json" && payload.json) {
         try { return JSON.parse(payload.json); } catch { return {}; }
     }
     return {};
+}
+
+/**
+ * Normalise a raw input_prompt_template value coming from storage or import.
+ * Guarantees the result is always an array of valid part objects.
+ *
+ *   null / undefined        → [{ type:"text", text:"" }]
+ *   string                  → [{ type:"text", text: <string> }]   (legacy)
+ *   array                   → filtered & normalised
+ */
+export function normalisePromptTemplate(raw) {
+    if (!raw) return [makeTextPart()];
+
+    // Legacy: bare string
+    if (typeof raw === "string") return [makeTextPart(raw)];
+
+    if (!Array.isArray(raw) || raw.length === 0) return [makeTextPart()];
+
+    return raw.map((part) => {
+        if (!part || typeof part !== "object") return makeTextPart();
+        if (part.type === "image") return makeImagePart(part.image || "");
+        // Default to text for unknown types
+        return makeTextPart(part.text || "");
+    });
 }

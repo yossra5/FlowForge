@@ -1,0 +1,47 @@
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:6
+    container_name: flowforge-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  # Node.js Backend
+  backend:
+    build: ./server
+    container_name: flowforge-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - MONGO_URI=mongodb://mongodb:27017/flowforge
+      - ML_SERVICE_URL=http://ml-service:8001
+      - SESSION_SECRET=your_super_secret_key_change_this
+    depends_on:
+      - mongodb
+      - ml-service
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    restart: unless-stopped
+
+  # Python ML Service
+  ml-service:
+    build: ./ml-service
+    container_name: flowforge-ml
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGO_URI=mongodb://mongodb:27017/flowforge
+    volumes:
+      - ./ml-service:/app
+      - /app/__pycache__
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

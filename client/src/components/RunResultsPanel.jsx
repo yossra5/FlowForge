@@ -1,67 +1,89 @@
-// client/src/components/RunResultsPanel.jsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Slide-in panel shown after clicking "Run Workflow".
-// Displays one result card per node that was executed.
-//
-// PROPS:
-//   results   array   — list of result objects from POST /api/execute/workflow
-//                       each has: { nodeId, label, type, status, data, error, duration }
-//   onClose   function — called when user clicks X to hide the panel
-//
-// RESULT CARD COLORS:
-//   2xx status  → green  (success)
-//   4xx status  → orange (client error — wrong URL, auth, etc.)
-//   5xx status  → red    (server error)
-//   "error"     → red    (network error, timeout, DNS fail)
-//   "skipped"   → gray   (node type not yet implemented)
-// ─────────────────────────────────────────────────────────────────────────────
-
 import React, { useState } from "react";
-import { X, ChevronDown, ChevronUp, Clock, CheckCircle, AlertCircle, XCircle } from "lucide-react";
+import { useTheme } from "../context/ThemeContext";
+import {
+  X, ChevronDown, ChevronUp, Clock,
+  CheckCircle, AlertCircle, XCircle
+} from "lucide-react";
 
-// Choose icon and color based on the HTTP status or error string
+// Status colors
 function getStatusStyle(status) {
-  if (status === "error")   return { color: "#f38ba8", icon: XCircle,       label: "Error" };
-  if (status === "skipped") return { color: "#888",    icon: AlertCircle,   label: "Skipped" };
+  if (status === "error") return { color: "#f38ba8", icon: XCircle, label: "Error" };
+  if (status === "skipped") return { color: "#888", icon: AlertCircle, label: "Skipped" };
+  if (status === "not_configured") return { color: "#e06c3a", icon: AlertCircle, label: "Not Configured" };
   if (status >= 200 && status < 300) return { color: "#4ade80", icon: CheckCircle, label: String(status) };
   if (status >= 400 && status < 500) return { color: "#e06c3a", icon: AlertCircle, label: String(status) };
   return { color: "#f38ba8", icon: XCircle, label: String(status) };
 }
 
-// Single result card — collapsible JSON output
-function ResultCard({ result }) {
+function ResultCard({ result, ui }) {
   const [expanded, setExpanded] = useState(true);
   const style = getStatusStyle(result.status);
-  const Icon  = style.icon;
+  const Icon = style.icon;
+
+  const needsConfig = result.type === "LLMCall" || result.type === "AIAgent";
+  const isNotConfigured = result.status === "not_configured" || (needsConfig && !result.data);
 
   return (
-    <div style={{ ...s.card, borderColor: style.color + "44" }}>
-      {/* Card header */}
-      <div style={s.cardHeader} onClick={() => setExpanded((v) => !v)}>
+    <div
+      style={{
+        ...s.card,
+        background: ui.surface,
+        borderColor: ui.border,
+      }}
+    >
+      <div style={s.cardHeader} onClick={() => setExpanded(v => !v)}>
         <div style={s.cardLeft}>
           <Icon size={15} color={style.color} />
-          <span style={{ ...s.cardLabel, color: style.color }}>{style.label}</span>
-          <span style={s.cardName}>{result.label}</span>
-          <span style={s.cardType}>{result.type}</span>
+          <span style={{ ...s.cardLabel, color: style.color }}>
+            {style.label}
+          </span>
+          <span style={{ ...s.cardName, color: ui.text }}>
+            {result.label}
+          </span>
+          <span style={{ ...s.cardType, color: ui.textHint }}>
+            {result.type}
+          </span>
         </div>
         <div style={s.cardRight}>
-          <span style={s.duration}>
-            <Clock size={11} style={{ marginRight: 3 }} />
-            {result.duration}ms
-          </span>
-          {expanded ? <ChevronUp size={14} color="#555" /> : <ChevronDown size={14} color="#555" />}
+          {result.duration !== undefined && (
+            <span style={{ ...s.duration, color: ui.textMuted }}>
+              <Clock size={11} style={{ marginRight: 3 }} />
+              {result.duration}ms
+            </span>
+          )}
+          {expanded
+            ? <ChevronUp size={14} color={ui.textMuted} />
+            : <ChevronDown size={14} color={ui.textMuted} />
+          }
         </div>
       </div>
 
-      {/* Collapsible body — JSON response or error message */}
       {expanded && (
-        <div style={s.cardBody}>
-          {result.error && result.status === "error" ? (
+        <div
+          style={{
+            ...s.cardBody,
+            borderTop: `1px solid ${ui.border}`,
+          }}
+        >
+          {result.error ? (
             <p style={s.errorText}>{result.error}</p>
-          ) : (
+          ) : isNotConfigured ? (
+            <div>
+              <p style={{ margin: 0, fontSize: 12, color: "#e06c3a" }}>
+                ⚠️ This node is not fully configured
+              </p>
+              <p style={{ margin: "8px 0 0 0", fontSize: 10, color: ui.textMuted }}>
+                Please double-click the node and complete its configuration.
+              </p>
+            </div>
+          ) : result.data ? (
             <pre style={s.json}>
               {JSON.stringify(result.data, null, 2)}
             </pre>
+          ) : (
+            <p style={{ margin: 0, fontSize: 11, color: ui.textMuted, fontStyle: "italic" }}>
+              No output yet. Run the workflow to see results.
+            </p>
           )}
         </div>
       )}
@@ -70,40 +92,103 @@ function ResultCard({ result }) {
 }
 
 export default function RunResultsPanel({ results, onClose }) {
+  const { ui, isDark } = useTheme();
+
   if (!results) return null;
 
-  // Filter out trigger nodes and skipped results (they don't show in n8n)
-  const filteredResults = results.filter(r => 
-    r.type !== "ManualTrigger" && 
-    r.type !== "ScheduleTrigger" && 
-    r.status !== "skipped"
+  const filteredResults = results.filter(
+    r => r.type !== "ManualTrigger" && r.type !== "ScheduleTrigger"
   );
 
-  // If no results after filtering, don't show the panel
-  if (filteredResults.length === 0) {
-    return null;
-  }
+  if (filteredResults.length === 0) return null;
 
-  const successCount = filteredResults.filter((r) => r.status >= 200 && r.status < 300).length;
-  const errorCount   = filteredResults.filter((r) => r.status === "error" || r.status >= 400).length;
+  const successCount = filteredResults.filter(r => r.status >= 200 && r.status < 300).length;
+  const errorCount = filteredResults.filter(r => r.status === "error" || r.status >= 400).length;
+  const notConfiguredCount = filteredResults.filter(r => r.status === "not_configured").length;
 
   return (
-    <div style={s.panel}>
-      {/* Panel header */}
-      <div style={s.header}>
+    <div
+      style={{
+        ...s.panel,
+        background: ui.surface,
+        borderLeft: `1px solid ${ui.border}`,
+      }}
+    >
+      {/* Header - Fixed */}
+      <div
+        style={{
+          ...s.header,
+          borderBottom: `1px solid ${ui.border}`,
+        }}
+      >
         <div style={s.headerLeft}>
-          <span style={s.title}>Run Results</span>
-          <span style={s.badge}>{filteredResults.length} node{filteredResults.length !== 1 ? "s" : ""}</span>
-          {successCount > 0 && <span style={{ ...s.badge, background: "#1a3a2a", color: "#4ade80" }}>{successCount} ok</span>}
-          {errorCount   > 0 && <span style={{ ...s.badge, background: "#3a1a1a", color: "#f38ba8" }}>{errorCount} failed</span>}
+          <span style={{ ...s.title, color: ui.text }}>
+            Run Results
+          </span>
+
+          <span
+            style={{
+              ...s.badge,
+              background: ui.surface2,
+              color: ui.textMuted,
+              border: `1px solid ${ui.border}`,
+            }}
+          >
+            {filteredResults.length} node{filteredResults.length !== 1 ? "s" : ""}
+          </span>
+
+          {successCount > 0 && (
+            <span
+              style={{
+                ...s.badge,
+                background: isDark ? "#1a3a2a" : "#dcfce7",
+                color: "#4ade80",
+                border: `1px solid ${isDark ? "#1a3a2a" : "#bbf7d0"}`
+              }}
+            >
+              {successCount} ok
+            </span>
+          )}
+
+          {errorCount > 0 && (
+            <span
+              style={{
+                ...s.badge,
+                background: isDark ? "#3a1a1a" : "#fee2e2",
+                color: "#ef4444",
+                border: `1px solid ${isDark ? "#3a1a1a" : "#fecaca"}`
+              }}
+            >
+              {errorCount} failed
+            </span>
+          )}
+
+          {notConfiguredCount > 0 && (
+            <span
+              style={{
+                ...s.badge,
+                background: isDark ? "#3a2a1a" : "#fef3c7",
+                color: "#e06c3a",
+                border: `1px solid ${isDark ? "#3a2a1a" : "#fde68a"}`
+              }}
+            >
+              {notConfiguredCount} not configured
+            </span>
+          )}
         </div>
-        <button style={s.closeBtn} onClick={onClose}><X size={15} /></button>
+
+        <button
+          style={{ ...s.closeBtn, color: ui.textMuted }}
+          onClick={onClose}
+        >
+          <X size={15} />
+        </button>
       </div>
 
-      {/* Result cards */}
+      {/* Scrollable List */}
       <div style={s.list}>
-        {filteredResults.map((r) => (
-          <ResultCard key={r.nodeId} result={r} />
+        {filteredResults.map(r => (
+          <ResultCard key={r.nodeId} result={r} ui={ui} />
         ))}
       </div>
     </div>
@@ -112,58 +197,112 @@ export default function RunResultsPanel({ results, onClose }) {
 
 const s = {
   panel: {
-    width: 380, background: "#0d0d20",
-    borderLeft: "1px solid #2d2d4e",
-    display: "flex", flexDirection: "column",
-    height: "100%", flexShrink: 0, overflow: "hidden",
+    width: 380,
+    display: "flex",
+    flexDirection: "column",
+    height: "100%",
+    flexShrink: 0,
+    overflow: "hidden", // Prevents panel overflow
   },
+
   header: {
-    display: "flex", alignItems: "center",
+    display: "flex",
+    alignItems: "center",
     justifyContent: "space-between",
     padding: "12px 14px",
-    borderBottom: "1px solid #2d2d4e",
-    flexShrink: 0,
+    flexShrink: 0, // Header stays fixed
   },
-  headerLeft: { display: "flex", alignItems: "center", gap: 8 },
-  title:  { fontSize: 13, fontWeight: 600, color: "#e8e8f0" },
+
+  headerLeft: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+
+  title: { fontSize: 13, fontWeight: 600 },
+
   badge: {
-    fontSize: 11, padding: "2px 7px",
-    background: "#1a1a2e", color: "#666",
+    fontSize: 11,
+    padding: "2px 7px",
     borderRadius: 5,
   },
+
   closeBtn: {
-    background: "none", border: "none", cursor: "pointer",
-    color: "#555", padding: 3, display: "flex", alignItems: "center",
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: 3,
+    display: "flex",
+    alignItems: "center",
   },
-  list: { flex: 1, overflowY: "auto", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8 },
-  card: {
-    background: "#13132a", border: "1px solid",
-    borderRadius: 8, overflow: "hidden",
-  },
-  cardHeader: {
-    display: "flex", alignItems: "center",
-    justifyContent: "space-between",
-    padding: "9px 12px", cursor: "pointer",
-  },
-  cardLeft:  { display: "flex", alignItems: "center", gap: 7 },
-  cardRight: { display: "flex", alignItems: "center", gap: 8 },
-  cardLabel: { fontSize: 12, fontWeight: 700 },
-  cardName:  { fontSize: 12, color: "#e8e8f0", fontWeight: 500 },
-  cardType:  { fontSize: 10, color: "#444" },
-  duration: {
-    fontSize: 10, color: "#555",
-    display: "flex", alignItems: "center",
-  },
-  cardBody: {
-    borderTop: "1px solid #2d2d4e",
+
+  list: {
+    flex: 1,
+    overflowY: "auto",  // Makes the list scrollable
     padding: "10px 12px",
-    maxHeight: 220, overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    // Custom scrollbar styling
+    scrollbarWidth: "thin",
+    "&::-webkit-scrollbar": {
+      width: "6px",
+    },
+    "&::-webkit-scrollbar-track": {
+      background: "#1a1a2e",
+      borderRadius: "3px",
+    },
+    "&::-webkit-scrollbar-thumb": {
+      background: "#2d2d4e",
+      borderRadius: "3px",
+    },
   },
+
+  card: {
+    border: "1px solid",
+    borderRadius: 8,
+    overflow: "hidden",
+    flexShrink: 0, // Cards don't shrink
+  },
+
+  cardHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "9px 12px",
+    cursor: "pointer",
+  },
+
+  cardLeft: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
+
+  cardRight: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
+
+  cardLabel: { fontSize: 12, fontWeight: 700 },
+
+  cardName: { fontSize: 12, fontWeight: 500 },
+
+  cardType: { fontSize: 10 },
+
+  duration: {
+    fontSize: 10,
+    display: "flex",
+    alignItems: "center",
+  },
+
+  cardBody: {
+    padding: "10px 12px",
+    maxHeight: 250,  // Limits body height, scrolls internally if too long
+    overflowY: "auto",
+  },
+
   json: {
-    margin: 0, fontSize: 11,
-    color: "#89b4fa", fontFamily: "monospace",
-    whiteSpace: "pre-wrap", wordBreak: "break-all",
+    margin: 0,
+    fontSize: 11,
+    fontFamily: "monospace",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-all",
+    color: "#89b4fa", // Blue text for JSON
   },
-  errorText: { margin: 0, fontSize: 12, color: "#f38ba8" },
-  empty: { margin: 0, fontSize: 12, color: "#555", textAlign: "center", padding: "20px 0" },
+
+  errorText: {
+    margin: 0,
+    fontSize: 12,
+    color: "#f38ba8",
+  },
 };
