@@ -1,181 +1,136 @@
-# FlowForge — Full Stack Workflow Builder
+# FlowForge — Visual Workflow Builder
 
-React [React Flow/Lucid React]+ Express + NodeJS + MongoDB.
+## What is FlowForge?
 
----
-
-## One-time setup
-
-```bash
-# 1. Install Node.js LTS from https://nodejs.org
-
-# 2. Enter the project folder
-cd flowforge
-
-# 3. Install ALL dependencies (root + server + client) in one command
-npm run install:all
-```
+FlowForge is a **full-stack visual workflow builder** that allows users to create, configure, and execute automated workflows through an intuitive drag-and-drop interface. Designed with an n8n-style node editor, it enables seamless integration of API calls, AI agents, LLM chains, and custom tools into complex automation pipelines.
 
 ---
 
-## Run in development
+## Built With
 
-```bash
-# From the root /flowforge folder — starts BOTH server and client
-npm run dev
-```
+**Frontend:**
+- React 18
+- React Flow (node-based canvas)
+- Lucide React (icons)
+- Custom CSS-in-JS styling
 
-| Service | URL |
-|---------|-----|
-| React frontend | http://localhost:3000 |
-| Express API    | http://localhost:5000 |
+**Backend:**
+- Express.js
+- MongoDB with Mongoose
+- Axios (HTTP requests)
 
-The React dev server proxies all `/api/...` calls to Express automatically.
-
----
-
-## Run in production
-
-```bash
-# Build the React app
-npm run build
-
-# Start the Express server (it serves the built React files)
-npm start
-# Open http://localhost:5000
-```
+**Authentication:**
+- Session-based authentication
+- bcrypt for password hashing
 
 ---
 
-## Project structure
-
-```
+## Project Structure
 flowforge/
-├── package.json              ← root: runs client + server together
+├── client/ # React frontend
+│ └── src/
+│ ├── components/ # NodeCard, Sidebar, Toolbar, Modals
+│ ├── pages/ # AuthPage, DashboardPage, EditorPage
+│ ├── context/ # AuthContext, ThemeContext
+│ ├── services/ # API calls, validation, serialization
+│ └── data/ # Node types and defaults
 │
-├── server/
-│   ├── index.js              ← Express entry point
-│   ├── .env                  ← PORT, SESSION_SECRET, DB_PATH
-│   ├── db/
-│   │   └── init.js           ← SQLite setup (creates tables on first run)
-│   ├── middleware/
-│   │   └── auth.js           ← requireAuth middleware
-│   └── routes/
-│       ├── auth.js           ← /api/auth/register|login|logout|me
-│       ├── workflows.js      ← /api/workflows  (CRUD, auth-protected)
-│       └── execute.js        ← /api/execute    (HTTP proxy, auth-protected)
+├── server/ # Express backend
+│ ├── routes/ # auth, workflows, execute
+│ ├── middleware/ # authentication
+│ ├── db/ # MongoDB connection
+│ └── index.js # Entry point
 │
-└── client/
-    └── src/
-        ├── App.jsx           ← Root: Auth → Dashboard → Editor routing
-        ├── index.js          ← Entry point
-        ├── context/
-        │   └── AuthContext.jsx   ← Global user state (login/logout/me)
-        ├── pages/
-        │   ├── AuthPage.jsx      ← Login + Register
-        │   ├── DashboardPage.jsx ← Workflow list
-        │   └── EditorPage.jsx    ← Canvas editor
-        ├── components/
-        │   ├── Toolbar.jsx           ← Save + Export JSON + rename workflow
-        │   ├── Sidebar.jsx           ← Node catalog (drag or click)
-        │   ├── NodeCard.jsx          ← Node on canvas (editable name)
-        │   └── HttpRequestModal.jsx  ← Double-click popup for HTTP params
-        ├── services/
-        │   ├── api.js               ← All axios calls (authAPI, workflowAPI, executeAPI)
-        │   ├── ValidateName.js      ← Node name uniqueness + auto-increment
-        │   ├── WorkflowSerializer.js← Canvas → JSON + save to DB + download
-        │   └── uuid.js              ← ID generator
-        └── data/
-            └── nodeTypes.js         ← Node catalog + HTTP_REQUEST_DEFAULTS schema
-```
+└── package.json # Root with concurrent dev scripts
+
 
 ---
 
-## API Reference
+## Core Functionalities
 
-### Auth
-| Method | URL | Body | Description |
-|--------|-----|------|-------------|
-| POST | /api/auth/register | `{ username, email, password }` | Create account + auto-login |
-| POST | /api/auth/login    | `{ username, password }`        | Login |
-| POST | /api/auth/logout   | —                               | Destroy session |
-| GET  | /api/auth/me       | —                               | Get current user |
+### Node Editor Canvas
+- Drag-and-drop nodes from sidebar
+- Connect nodes via visual edges
+- Pan, zoom, and fit view controls
+- MiniMap and background customization
 
-### Workflows (all require login)
-| Method | URL | Body | Description |
-|--------|-----|------|-------------|
-| GET    | /api/workflows        | —                    | List all (metadata) |
-| POST   | /api/workflows        | `{ name, data }`     | Create new workflow |
-| GET    | /api/workflows/:id    | —                    | Get full workflow |
-| PUT    | /api/workflows/:id    | `{ name?, data? }`   | Save/update |
-| DELETE | /api/workflows/:id    | —                    | Delete |
+### Node Types
+- **Manual Trigger** — Start workflow with confirmation
+- **Schedule Trigger** — Time-based execution
+- **API Call** — HTTP requests with authentication
+- **AI Agent** — Intelligent agent with tool calling
+- **LLM Basic Chain** — Direct language model calls
+- **Tool Node** — API tools connected to AI Agent
 
-### Execute (requires login)
-| Method | URL | Body | Description |
-|--------|-----|------|-------------|
-| POST | /api/execute | `{ parameters }` | Run an HTTP Request node via server-side proxy |
+### AI Agent Features
+- Plus (+) button creates connected Tool nodes
+- Tool nodes stack vertically to the right
+- Solid line connections for tools
+- Dashed line connections for regular nodes
+- Delete confirmation with connected tools warning
 
----
+### Workflow Management
+- Save/auto-save workflows to MongoDB
+- Export/import workflow JSON files
+- Rename workflows and nodes
+- Run workflows with visual execution status
 
-## Authentication strategy 
+### Authentication
+- User registration and login
+- Session-based authentication
+- Protected API routes
+- Personal workflow storage per user
 
-The auth flag on each HTTP Request node:
+### Execution Engine
+- Sequential node execution based on connections
+- Variable interpolation using `{{NodeName.field}}` syntax
+- Support for Manual Trigger variables
+- HTTP request proxying with authentication
+- LLM-filled tool parameters
 
-```js
-authentication: {
-  type: "none" | "bearerToken" | "apiKey" | "basicAuth",
-
-  bearerToken: { token: "eyJ..." },
-
-  apiKey: {
-    in: "header" | "query",
-    name: "X-API-Key",
-    value: "your-key"
-  },
-
-  basicAuth: {
-    username: "user",
-    password: "pass"
-  }
-}
-```
-
-Why a single `type` flag:
-- Only one auth method can be active at a time (mutually exclusive)
-- The execute route does `if (auth.type === "bearerToken") { ... }` — clean switch
-- Extensible: adding OAuth2 = one new `type` value
-- The UI shows/hides the right fields based on the selected type
+### Input/Output Panels
+- Real-time variable inspection
+- Drag-and-drop variable insertion
+- Previous node output visibility
+- Manual trigger variable management
 
 ---
 
-## Workflow JSON format (exported file)
+## Key Features
 
-```json
-{
-  "name": "My Workflow",
-  "version": "1.0",
-  "createdAt": "2025-...",
-  "nodes": [
-    {
-      "uniq_id": "abc-123",
-      "type": "HTTPRequest",
-      "label": "Get Users",
-      "description": "",
-      "position": { "x": 200, "y": 150 },
-      "parameters": {
-        "method": "GET",
-        "url": { "value": "https://api.example.com/users", "mode": "fixed" },
-        "authentication": { "type": "none" }
-      },
-      "nexts": ["def-456"]
-    }
-  ]
-}
-```
+✅ Visual node editor with React Flow  
+✅ Multiple node types (Triggers, Actions, AI, Tools)  
+✅ AI Agent with dynamic tool creation  
+✅ Auto-incrementing tool naming  
+✅ Solid tool connections / dashed regular connections  
+✅ Delete confirmation for AI Agent with tools  
+✅ Save, export, import workflows  
+✅ Variable interpolation system  
+✅ HTTP request with authentication (Bearer, API Key, Basic)  
+✅ Session-based authentication  
+✅ MongoDB persistence  
+✅ Development hot reload  
+✅ Production build ready  
 
 ---
+## Quick Start
 
-## What to build next
+```bash
+# Install dependencies
+npm run install:all
 
-1. More node types: `AIAgent`, `LLMCall` — same pattern as HTTPRequest
+# Run development (client + server)
+npm run dev
 
+# Build for production
+npm run build
+npm start
+---
+Frontend: http://localhost:3000
+Backend API: http://localhost:5000
+
+Environment Variables
+env
+PORT=5000
+SESSION_SECRET=your_secret_key
+MONGO_URI=mongodb://localhost:27017/flowforge
