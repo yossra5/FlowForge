@@ -25,27 +25,6 @@ FlowForge is a **full-stack visual workflow builder** that allows users to creat
 
 ---
 
-## Project Structure
-flowforge/
-├── client/ # React frontend
-│ └── src/
-│ ├── components/ # NodeCard, Sidebar, Toolbar, Modals
-│ ├── pages/ # AuthPage, DashboardPage, EditorPage
-│ ├── context/ # AuthContext, ThemeContext
-│ ├── services/ # API calls, validation, serialization
-│ └── data/ # Node types and defaults
-│
-├── server/ # Express backend
-│ ├── routes/ # auth, workflows, execute
-│ ├── middleware/ # authentication
-│ ├── db/ # MongoDB connection
-│ └── index.js # Entry point
-│
-└── package.json # Root with concurrent dev scripts
-
-
----
-
 ## Core Functionalities
 
 ### Node Editor Canvas
