@@ -15,7 +15,7 @@ import React, { useState, useCallback } from "react";
 import { X, Plus, Trash2, MessageSquare, ChevronDown, Image as ImageIcon, Type, MoveUp, MoveDown, Pencil, Check } from "lucide-react";
 import InputPanel from "./InputPanel";
 import OutputPanel from "./OutputPanel";
-import SmartInput from "./SmartInput";  // ← CHANGED: import SmartInput instead
+import SmartInput from "./SmartInput";  
 
 import {
     LLM_MODELS,
